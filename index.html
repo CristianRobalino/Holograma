@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proyector Holográfico 3D</title>
+    <style>
+        :root {
+            --primary: #00f2fe;
+            --secondary: #4facfe;
+            --bg: #000000;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            overflow: hidden;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #fff;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #1a1a24 0%, var(--bg) 100%);
+            z-index: 10;
+            transition: opacity 0.5s ease;
+        }
+
+        #ui-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 2.2rem;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 2rem;
+            letter-spacing: 1px;
+        }
+
+        .mode-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        @media (max-width: 500px) {
+            .mode-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .mode-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid transparent;
+            border-radius: 15px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .mode-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
+        }
+
+        .mode-card.active {
+            border-color: var(--primary);
+            background: rgba(0, 242, 254, 0.1);
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.2);
+        }
+
+        .mode-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .mode-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .mode-desc {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.6);
+            line-height: 1.4;
+        }
+
+        #start-btn {
+            background: linear-gradient(45deg, var(--secondary), var(--primary));
+            border: none;
+            padding: 1.2rem 2.5rem;
+            border-radius: 30px;
+            color: #000;
+            font-weight: 800;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #start-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 242, 254, 0.4);
+        }
+
+        #start-btn:disabled {
+            background: #333;
+            color: #777;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        #error-msg {
+            color: #ff4757;
+            margin-top: 1.5rem;
+            font-size: 0.95rem;
+            min-height: 20px;
+            font-weight: 500;
+        }
+
+        #esc-hint {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 1s ease;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+    </style>
+
+    <!-- Import Maps para modern ES Modules via CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+
+    <div id="ui-container">
+        <div class="panel">
+            <h1>Visor Holográfico</h1>
+
+            <div class="mode-grid">
+                <div class="mode-card active" data-mode="phone">
+                    <div class="mode-icon">📱</div>
+                    <div class="mode-title">Modo Teléfono</div>
+                    <div class="mode-desc">Pirámide de 4 caras. Muestra las 4 perspectivas en cruz.</div>
+                </div>
+                <div class="mode-card" data-mode="laptop">
+                    <div class="mode-icon">💻</div>
+                    <div class="mode-title">Modo Laptop</div>
+                    <div class="mode-desc">Reflector de 1 cara a 45°. Muestra la vista invertida.</div>
+                </div>
+            </div>
+
+            <button id="start-btn" disabled>Cargando Modelo...</button>
+            <div id="error-msg"></div>
+        </div>
+    </div>
+
+    <div id="esc-hint">DISEÑO ACTIVO - PULSA ESC PARA SALIR</div>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        // =========================
+        // UI & EVENT LOGIC
+        // =========================
+        let currentMode = 'phone';
+        let isRendering = false;
+
+        const uiContainer = document.getElementById('ui-container');
+        const modeCards = document.querySelectorAll('.mode-card');
+        const btnStart = document.getElementById('start-btn');
+        const errorMsg = document.getElementById('error-msg');
+        const escHint = document.getElementById('esc-hint');
+
+        // Mode Seleccionado
+        modeCards.forEach(card => {
+            card.addEventListener('click', () => {
+                modeCards.forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                currentMode = card.getAttribute('data-mode');
+            });
+        });
+
+        // Pantalla Completa & Inicializar Render
+        btnStart.addEventListener('click', () => {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(() => {
+                    errorMsg.textContent = "Error activando Fullscreen. Asegúrate de interactuar con la página.";
+                });
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else {
+                errorMsg.textContent = "API de Pantalla Completa no soportada en este navegador.";
+            }
+        });
+
+        const toggleProjection = () => {
+            const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+            if (isFullscreen) {
+                uiContainer.classList.add('hidden');
+                isRendering = true;
+
+                escHint.style.opacity = '1';
+                setTimeout(() => { escHint.style.opacity = '0'; }, 4000);
+            } else {
+                uiContainer.classList.remove('hidden');
+                isRendering = false;
+            }
+        };
+
+        document.addEventListener('fullscreenchange', toggleProjection);
+        document.addEventListener('webkitfullscreenchange', toggleProjection);
+
+        // =========================
+        // THREE.JS CORE LOGIC
+        // =========================
+
+        // offsetCentro: distancia en píxeles desde el centro de la pantalla
+        // hasta el borde interior de cada viewport. ¡Ajusta este número para
+        // cambiar el tamaño del holograma visible en tu pirámide!
+        // ↓ Valor pequeño = cuadrados más grandes = holograma más grande
+        const offsetCentro = 25;
+
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.setScissorTest(true); // Crítico para renderizar por partes
+        canvasContainer.appendChild(renderer.domElement);
+
+        // Cuatro cámaras independientes, una por cada cara de la pirámide
+        // position.z = 7 → distancia equilibrada con modelo de ~6 unidades
+        function makeCam() {
+            const cam = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+            cam.position.z = 7;
+            return cam;
+        }
+        const camBottom = makeCam(); // Vista inferior  → rotación Z =   0°
+        const camTop = makeCam(); // Vista superior  → rotación Z = 180°
+        const camLeft = makeCam(); // Vista izquierda → rotación Z =  90°
+        const camRight = makeCam(); // Vista derecha   → rotación Z = -90°
+
+        // Agrupación para manejar la rotación de animación del modelo
+        const wrapper = new THREE.Group();
+        const pivot = new THREE.Group();
+        wrapper.add(pivot);
+        scene.add(wrapper);
+
+        // Luz ambiental suave de respaldo
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+        scene.add(ambientLight);
+
+        // =========================
+        // CARGA DE MODELO GLTF
+        // =========================
+        const loader = new GLTFLoader();
+
+        loader.load(
+            'earth_hologram.glb',
+            (gltf) => {
+                const model = gltf.scene;
+
+                // Auto-centrado y auto-escalado para asegurar que sea visible sin importar origen
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 4 / maxDim; // Tamaño equilibrado: ni muy grande ni muy pequeño
+                model.scale.setScalar(scale);
+                model.position.sub(center.multiplyScalar(scale)); // Volver al origen
+
+                pivot.add(model);
+
+                btnStart.textContent = 'Iniciar Proyección';
+                btnStart.disabled = false;
+            },
+            undefined, // Callback progreso
+            (error) => {
+                console.error(error);
+                errorMsg.innerHTML = "Error al cargar <b>earth_hologram.glb</b>. <br><br>🚨 ¿Lo abriste clickeando el archivo HTML?<br>Requieres usar un servidor local (Ej. Live Server en VSCode) por políticas de seguridad CORS del navegador.";
+                btnStart.textContent = 'Error';
+            }
+        );
+
+        // =========================
+        // RENDER LOOP & VIEWPORTS
+        // =========================
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        const clock = new THREE.Clock();
+
+        // Renderiza la escena con una cámara y viewport específicos.
+        // IMPORTANTE: Three.js usa coordenadas Y invertidas para setViewport/setScissor
+        // (origen en la esquina INFERIOR-izquierda del canvas), así que convertimos
+        // desde coordenadas de pantalla estándar (origen arriba-izquierda).
+        function renderViewport(cam, screenX, screenY, vpW, vpH) {
+            const totalH = window.innerHeight;
+            // Convertir Y de pantalla (↓) a Y de WebGL (↑)
+            const glY = totalH - screenY - vpH;
+            cam.aspect = vpW / vpH;
+            cam.updateProjectionMatrix();
+            renderer.setViewport(screenX, glY, vpW, vpH);
+            renderer.setScissor(screenX, glY, vpW, vpH);
+            renderer.render(scene, cam);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Pausa el render si estamos en el menú UI
+            if (!isRendering) return;
+
+            const delta = clock.getDelta();
+            pivot.rotation.y += delta * 0.5; // Rotación continua en su eje Y propio
+
+            const W = window.innerWidth;
+            const H = window.innerHeight;
+            const cx = W / 2;   // Centro X en píxeles
+            const cy = H / 2;   // Centro Y en píxeles
+
+            // ─── Fondo negro total ───────────────────────────────────────────
+            renderer.setScissorTest(false);
+            renderer.setClearColor(0x000000, 1);
+            renderer.clear();
+            renderer.setScissorTest(true);
+
+            if (currentMode === 'phone') {
+                // ─────────────────────────────────────────────────────────────
+                // MODO TELÉFONO - Pirámide de 4 caras (Pepper's Ghost)
+                //
+                // Layout (coordenadas de pantalla, Y crece hacia ABAJO):
+                //
+                //          ┌─────────────────────────────┐
+                //          │        [Vista Superior]      │  ← ancho=vpW, alto=vpH
+                //          │      (desde borde superior   │
+                //          │       hasta offsetCentro px  │
+                //          │       antes del centro)      │
+                //          ├──────────┬───────┬───────────┤
+                //          │[V.Izq.]  │ NEGRO │ [V.Der.]  │
+                //          ├──────────┴───────┴───────────┤
+                //          │        [Vista Inferior]      │
+                //          └─────────────────────────────┘
+                //
+                // Cada viewport toca el borde exterior de la pantalla y su
+                // borde interior termina a 'offsetCentro' píxeles del centro.
+                // ─────────────────────────────────────────────────────────────
+
+                // Semi-espacios disponibles a cada lado del centro:
+                //   vpW = espacio horizontal desde el borde hasta el centro (menos offset)
+                //   vpH = espacio vertical desde el borde hasta el centro (menos offset)
+                const vpW = cx - offsetCentro;
+                const vpH = cy - offsetCentro;
+
+                // Para evitar deformaciones, cada vista se renderiza en un CUADRADO
+                // cuyo lado es el mínimo de los dos semiespacios disponibles.
+                // Así la cámara siempre tendrá aspect = 1 (imagen sin estirar).
+                const sq = Math.min(vpW, vpH);
+
+                // Regla de rotación (wrapper.rotation.z):
+                //   camBottom → Z =   0      base apunta hacia arriba  → hacia el centro
+                //   camTop    → Z = +180°    base apunta hacia abajo   → hacia el centro
+                //   camLeft   → Z =  +90°    base apunta hacia derecha → hacia el centro
+                //   camRight  → Z =  -90°    base apunta hacia izquierda→ hacia el centro
+
+                // ── VISTA INFERIOR ──────────────────────────────────────────
+                // Franja: X[0..W], Y[cy+offsetCentro .. H]  (alto útil = vpH)
+                // Cuadrado de lado sq, centrado en cx, pegado al borde inferior.
+                wrapper.rotation.set(0, 0, 0);
+                renderViewport(camBottom,
+                    cx - sq / 2,          // centrado horizontalmente
+                    cy + offsetCentro,    // borde superior de la franja (en coords pantalla)
+                    sq, sq                // cuadrado
+                );
+
+                // ── VISTA SUPERIOR ───────────────────────────────────────────
+                // Franja: X[0..W], Y[0 .. cy-offsetCentro]  (alto útil = vpH)
+                // Cuadrado de lado sq, centrado en cx, pegado al borde superior.
+                wrapper.rotation.set(0, 0, Math.PI);
+                renderViewport(camTop,
+                    cx - sq / 2,          // centrado horizontalmente
+                    cy - offsetCentro - sq,// borde superior del cuadrado (pegado al límite del centro)
+                    sq, sq
+                );
+
+                // ── VISTA IZQUIERDA ──────────────────────────────────────────
+                // Franja: X[0..cx-offsetCentro], Y[0..H]  (ancho útil = vpW)
+                // Cuadrado de lado sq, centrado en cy, pegado al borde izquierdo.
+                wrapper.rotation.set(0, 0, Math.PI / 2);
+                renderViewport(camLeft,
+                    cx - offsetCentro - sq,// borde izquierdo del cuadrado (pegado al límite del centro)
+                    cy - sq / 2,          // centrado verticalmente
+                    sq, sq
+                );
+
+                // ── VISTA DERECHA ─────────────────────────────────────────────
+                // Franja: X[cx+offsetCentro..W], Y[0..H]  (ancho útil = vpW)
+                // Cuadrado de lado sq, centrado en cy, pegado al borde derecho.
+                wrapper.rotation.set(0, 0, -Math.PI / 2);
+                renderViewport(camRight,
+                    cx + offsetCentro,    // borde izquierdo del cuadrado (empieza en el límite del centro)
+                    cy - sq / 2,          // centrado verticalmente
+                    sq, sq
+                );
+
+            } else if (currentMode === 'laptop') {
+                // Cámara única para el modo laptop
+                const laptopHeight = H * 0.45;
+                const laptopWidth = laptopHeight * (W / H > 1 ? 1.5 : 1.2);
+
+                wrapper.rotation.set(0, 0, Math.PI); // Inversión total 180°
+
+                // Ubicado abajo con un pequeño margen
+                const lapX = cx - laptopWidth / 2;
+                const lapY = H * 0.05 + laptopHeight; // screenY = borde inferior del viewport en coords pantalla
+                renderViewport(camBottom, lapX, H - H * 0.05 - laptopHeight, laptopWidth, laptopHeight);
+            }
+        }
+
+        animate();
+    </script>
+</body>
+
+</html>
