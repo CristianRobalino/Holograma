@@ -259,6 +259,9 @@
             }
         });
 
+        // Temporizador para cambiar de modelo
+        let timerCambioModelo = null;
+
         const toggleProjection = () => {
             const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
             if (isFullscreen) {
@@ -267,9 +270,26 @@
 
                 escHint.style.opacity = '1';
                 setTimeout(() => { escHint.style.opacity = '0'; }, 4000);
+
+                // Arrancar desde el modelo 1 (earth)
+                pivot.visible  = true;
+                pivot2.visible = false;
+
+                // Después de 35 segundos, cambiar al grifo_leon
+                timerCambioModelo = setTimeout(() => {
+                    pivot.visible  = false;
+                    pivot2.visible = true;
+                }, 35000);
+
             } else {
                 uiContainer.classList.remove('hidden');
                 isRendering = false;
+
+                // Cancelar el temporizador si el usuario sale antes
+                if (timerCambioModelo) {
+                    clearTimeout(timerCambioModelo);
+                    timerCambioModelo = null;
+                }
             }
         };
 
@@ -310,44 +330,78 @@
 
         // Agrupación para manejar la rotación de animación del modelo
         const wrapper = new THREE.Group();
-        const pivot = new THREE.Group();
+        const pivot  = new THREE.Group(); // Modelo 1: earth_hologram
+        const pivot2 = new THREE.Group(); // Modelo 2: grifo_leon
         wrapper.add(pivot);
+        wrapper.add(pivot2);
         scene.add(wrapper);
 
-        // Luz ambiental suave de respaldo
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+        pivot2.visible = false; // Oculto hasta que pasen 35 segundos
+
+        // Iluminación: ambiental + direccional para que cualquier modelo sea visible
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
         scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
 
         // =========================
-        // CARGA DE MODELO GLTF
+        // CARGA DE MODELOS GLTF
         // =========================
         const loader = new GLTFLoader();
 
-        loader.load(
-            'earth_hologram.glb',
-            (gltf) => {
-                const model = gltf.scene;
+        // Función auxiliar: centra y escala un modelo, lo añade al grupo indicado
+        function cargarEnPivot(url, grupoPivot, onExito, onError) {
+            loader.load(
+                url,
+                (gltf) => {
+                    const model = gltf.scene;
+                    const box    = new THREE.Box3().setFromObject(model);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size   = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale  = 4 / maxDim;
+                    model.scale.setScalar(scale);
+                    model.position.sub(center.multiplyScalar(scale));
+                    grupoPivot.add(model);
+                    if (onExito) onExito();
+                },
+                undefined,
+                (error) => { console.error('Error cargando ' + url, error); if (onError) onError(error); }
+            );
+        }
 
-                // Auto-centrado y auto-escalado para asegurar que sea visible sin importar origen
-                const box = new THREE.Box3().setFromObject(model);
-                const center = box.getCenter(new THREE.Vector3());
-                const size = box.getSize(new THREE.Vector3());
+        // ── Modelo 1: earth_hologram.glb ────────────────────────────────────
+        let earthListo  = false;
+        let grifoListo  = false;
 
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const scale = 4 / maxDim; // Tamaño equilibrado: ni muy grande ni muy pequeño
-                model.scale.setScalar(scale);
-                model.position.sub(center.multiplyScalar(scale)); // Volver al origen
-
-                pivot.add(model);
-
+        function revisarListos() {
+            if (earthListo && grifoListo) {
                 btnStart.textContent = 'Iniciar Proyección';
                 btnStart.disabled = false;
-            },
-            undefined, // Callback progreso
-            (error) => {
-                console.error(error);
-                errorMsg.innerHTML = "Error al cargar <b>earth_hologram.glb</b>. <br><br>🚨 ¿Lo abriste clickeando el archivo HTML?<br>Requieres usar un servidor local (Ej. Live Server en VSCode) por políticas de seguridad CORS del navegador.";
+            }
+        }
+
+        cargarEnPivot(
+            'earth_hologram.glb',
+            pivot,
+            () => { earthListo = true; revisarListos(); },
+            () => {
+                errorMsg.innerHTML = "Error al cargar <b>earth_hologram.glb</b>.<br>🚨 Usa un servidor local (Live Server en VSCode).";
                 btnStart.textContent = 'Error';
+            }
+        );
+
+        // ── Modelo 2: grifo_leon.glb ─────────────────────────────────────────
+        cargarEnPivot(
+            'grifo_leon_con_cabeza_de_aguila.glb',
+            pivot2,
+            () => { grifoListo = true; revisarListos(); },
+            () => {
+                // Si falla, habilitamos igual con solo la Tierra
+                grifoListo = true;
+                errorMsg.innerHTML = "⚠️ <b>grifo_leon_con_cabeza_de_aguila.glb</b> no encontrado. Verifica que esté en la carpeta del proyecto.";
+                revisarListos();
             }
         );
 
@@ -372,6 +426,7 @@
             cam.updateProjectionMatrix();
             renderer.setViewport(screenX, glY, vpW, vpH);
             renderer.setScissor(screenX, glY, vpW, vpH);
+            renderer.clearDepth(); // Limpiar depth buffer antes de cada vista para evitar artefactos
             renderer.render(scene, cam);
         }
 
@@ -382,7 +437,9 @@
             if (!isRendering) return;
 
             const delta = clock.getDelta();
-            pivot.rotation.y += delta * 0.5; // Rotación continua en su eje Y propio
+            // Rotar ambos modelos — el que sea visible girará, el invisible no se renderiza
+            pivot.rotation.y  += delta * 0.5;
+            pivot2.rotation.y += delta * 0.5;
 
             const W = window.innerWidth;
             const H = window.innerHeight;
