@@ -71,9 +71,8 @@
         }
 
         .mode-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
+            display: flex;
+            justify-content: center;
             margin-bottom: 2.5rem;
         }
 
@@ -205,7 +204,7 @@
                     <div class="mode-title">Modo Teléfono</div>
                     <div class="mode-desc">Pirámide de 4 caras. Muestra las 4 perspectivas en cruz.</div>
                 </div>
-                <div class="mode-card" data-mode="laptop">
+                <div class="mode-card" data-mode="laptop" style="display:none">
                     <div class="mode-icon">💻</div>
                     <div class="mode-title">Modo Laptop</div>
                     <div class="mode-desc">Reflector de 1 cara a 45°. Muestra la vista invertida.</div>
@@ -271,14 +270,18 @@
                 escHint.style.opacity = '1';
                 setTimeout(() => { escHint.style.opacity = '0'; }, 4000);
 
-                // Arrancar desde el modelo 1 (earth)
+                // Arrancar desde el modelo 1 (earth) con iluminacion original
                 pivot.visible  = true;
                 pivot2.visible = false;
+                dirLight.visible = false;
+                ambientLight.intensity = 0.3;
 
-                // Después de 35 segundos, cambiar al grifo_leon
+                // Despues de 35 segundos, cambiar al grifo y encender luz fuerte
                 timerCambioModelo = setTimeout(() => {
                     pivot.visible  = false;
                     pivot2.visible = true;
+                    dirLight.visible = true;
+                    ambientLight.intensity = 1.2;
                 }, 35000);
 
             } else {
@@ -336,13 +339,17 @@
         wrapper.add(pivot2);
         scene.add(wrapper);
 
-        pivot2.visible = false; // Oculto hasta que pasen 35 segundos
+        pivot2.visible = false;        // Oculto hasta que pasen 35 segundos
+        pivot2.rotation.x = Math.PI;   // Corrige orientación: el modelo viene boca abajo en el GLB
 
-        // Iluminación: ambiental + direccional para que cualquier modelo sea visible
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        // Iluminacion original del earth_hologram (solo ambiental suave = sin esfera gris)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
         scene.add(ambientLight);
+
+        // Luz direccional para el grifo — apagada por defecto, se enciende al cambiar de modelo
         const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
         dirLight.position.set(5, 10, 7);
+        dirLight.visible = false;
         scene.add(dirLight);
 
         // =========================
