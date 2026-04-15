@@ -534,24 +534,29 @@
                 );
 
                 // ── VISTA IZQUIERDA ──────────────────────────────────────────
-                // Franja: X[0..cx-offsetCentro], Y[0..H]  (ancho útil = vpW)
-                // Cuadrado de lado sq, centrado en cy, pegado al borde izquierdo.
+                // Wrapper original: PI/2 (correcto para la Tierra y el planeta)
+                // Para el grifo: necesita corrector.x=0 en esta vista (cabeza -Y mundo
+                // → +X pantalla = hacia el centro). Se cambia solo durante este render.
+                if (pivot2.visible) grifoCorrector.rotation.x = 0;
                 wrapper.rotation.set(0, 0, Math.PI / 2);
                 renderViewport(camLeft,
-                    cx - offsetCentro - sq,// borde izquierdo del cuadrado (pegado al límite del centro)
-                    cy - sq / 2,          // centrado verticalmente
+                    cx - offsetCentro - sq,
+                    cy - sq / 2,
                     sq, sq
                 );
+                if (pivot2.visible) grifoCorrector.rotation.x = Math.PI; // restaurar
 
                 // ── VISTA DERECHA ─────────────────────────────────────────────
-                // Franja: X[cx+offsetCentro..W], Y[0..H]  (ancho útil = vpW)
-                // Cuadrado de lado sq, centrado en cy, pegado al borde derecho.
+                // Wrapper original: -PI/2 (correcto para la Tierra y el planeta)
+                // Igual que izquierda: grifo necesita corrector.x=0 en esta vista.
+                if (pivot2.visible) grifoCorrector.rotation.x = 0;
                 wrapper.rotation.set(0, 0, -Math.PI / 2);
                 renderViewport(camRight,
-                    cx + offsetCentro,    // borde izquierdo del cuadrado (empieza en el límite del centro)
-                    cy - sq / 2,          // centrado verticalmente
+                    cx + offsetCentro,
+                    cy - sq / 2,
                     sq, sq
                 );
+                if (pivot2.visible) grifoCorrector.rotation.x = Math.PI; // restaurar
 
             } else if (currentMode === 'laptop') {
                 // Cámara única para el modo laptop
