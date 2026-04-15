@@ -258,8 +258,27 @@
             }
         });
 
-        // Temporizador para cambiar de modelo
+        // ── Ciclo infinito earth ↔ grifo (35s cada uno) ──────────────────────
         let timerCambioModelo = null;
+        let modeloActual = 0; // 0 = earth, 1 = grifo
+
+        function mostrarModelo(idx) {
+            if (idx === 0) {
+                pivot.visible  = true;  pivot2.visible = false;
+                dirLight.visible = false; ambientLight.intensity = 0.3;
+            } else {
+                pivot.visible  = false; pivot2.visible = true;
+                dirLight.visible = true;  ambientLight.intensity = 1.2;
+            }
+            modeloActual = idx;
+        }
+
+        function siguienteCiclo() {
+            // Alterna entre 0 (earth) y 1 (grifo)
+            mostrarModelo(modeloActual === 0 ? 1 : 0);
+            // Volver a llamarse en 35s → loop infinito
+            timerCambioModelo = setTimeout(siguienteCiclo, 35000);
+        }
 
         const toggleProjection = () => {
             const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
@@ -270,25 +289,15 @@
                 escHint.style.opacity = '1';
                 setTimeout(() => { escHint.style.opacity = '0'; }, 4000);
 
-                // Arrancar desde el modelo 1 (earth) con iluminacion original
-                pivot.visible  = true;
-                pivot2.visible = false;
-                dirLight.visible = false;
-                ambientLight.intensity = 0.3;
-
-                // Despues de 35 segundos, cambiar al grifo y encender luz fuerte
-                timerCambioModelo = setTimeout(() => {
-                    pivot.visible  = false;
-                    pivot2.visible = true;
-                    dirLight.visible = true;
-                    ambientLight.intensity = 1.2;
-                }, 35000);
+                // Siempre arranca desde earth y lanza el primer cambio en 35s
+                mostrarModelo(0);
+                timerCambioModelo = setTimeout(siguienteCiclo, 35000);
 
             } else {
                 uiContainer.classList.remove('hidden');
                 isRendering = false;
 
-                // Cancelar el temporizador si el usuario sale antes
+                // Detener el ciclo al salir con ESC
                 if (timerCambioModelo) {
                     clearTimeout(timerCambioModelo);
                     timerCambioModelo = null;
@@ -333,14 +342,20 @@
 
         // Agrupación para manejar la rotación de animación del modelo
         const wrapper = new THREE.Group();
-        const pivot  = new THREE.Group(); // Modelo 1: earth_hologram
+        const pivot = new THREE.Group(); // Modelo 1: earth_hologram
         const pivot2 = new THREE.Group(); // Modelo 2: grifo_leon
         wrapper.add(pivot);
         wrapper.add(pivot2);
         scene.add(wrapper);
 
-        pivot2.visible = false;        // Oculto hasta que pasen 35 segundos
-        pivot2.rotation.x = Math.PI;   // Corrige orientación: el modelo viene boca abajo en el GLB
+        pivot2.visible = false; // Oculto hasta que pasen 35 segundos
+
+        // Grupo corrector para la orientacion del grifo.
+        // Se coloca DENTRO de pivot2 (que solo hace la rotacion Y animada).
+        // Asi los transforms internos del GLB no se sobreescriben.
+        const grifoCorrector = new THREE.Group();
+        grifoCorrector.rotation.x = Math.PI; // flip: corrige que el modelo venia boca abajo
+        pivot2.add(grifoCorrector);
 
         // Iluminacion original del earth_hologram (solo ambiental suave = sin esfera gris)
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
@@ -363,11 +378,11 @@
                 url,
                 (gltf) => {
                     const model = gltf.scene;
-                    const box    = new THREE.Box3().setFromObject(model);
+                    const box = new THREE.Box3().setFromObject(model);
                     const center = box.getCenter(new THREE.Vector3());
-                    const size   = box.getSize(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
                     const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale  = 4 / maxDim;
+                    const scale = 4 / maxDim;
                     model.scale.setScalar(scale);
                     model.position.sub(center.multiplyScalar(scale));
                     grupoPivot.add(model);
@@ -379,8 +394,8 @@
         }
 
         // ── Modelo 1: earth_hologram.glb ────────────────────────────────────
-        let earthListo  = false;
-        let grifoListo  = false;
+        let earthListo = false;
+        let grifoListo = false;
 
         function revisarListos() {
             if (earthListo && grifoListo) {
@@ -399,13 +414,14 @@
             }
         );
 
-        // ── Modelo 2: grifo_leon.glb ─────────────────────────────────────────
+        // ── Modelo 2: grifo_leon_con_cabeza_de_aguila.glb ───────────────────────────
+        // Se carga en grifoCorrector (no en pivot2 directamente) para que el flip
+        // sea una transformacion padre, sin tocar los transforms del GLB.
         cargarEnPivot(
             'grifo_leon_con_cabeza_de_aguila.glb',
-            pivot2,
+            grifoCorrector,
             () => { grifoListo = true; revisarListos(); },
             () => {
-                // Si falla, habilitamos igual con solo la Tierra
                 grifoListo = true;
                 errorMsg.innerHTML = "⚠️ <b>grifo_leon_con_cabeza_de_aguila.glb</b> no encontrado. Verifica que esté en la carpeta del proyecto.";
                 revisarListos();
@@ -445,7 +461,7 @@
 
             const delta = clock.getDelta();
             // Rotar ambos modelos — el que sea visible girará, el invisible no se renderiza
-            pivot.rotation.y  += delta * 0.5;
+            pivot.rotation.y += delta * 0.5;
             pivot2.rotation.y += delta * 0.5;
 
             const W = window.innerWidth;
